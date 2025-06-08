@@ -1,4 +1,3 @@
-
 import random
 from google.adk.agents import Agent
 from google.adk.agents.loop_agent import LoopAgent
@@ -11,18 +10,20 @@ from typing import Any
 
 MODEL = "gemini-2.0-flash"
 
+# 工具函数：提取 Google Sheet 链接
 def extract_google_sheet_url(tool_context: ToolContext) -> str:
     query = tool_context.input.parts[0].text
     if "docs.google.com/spreadsheets" in query:
         return query
     return ""
 
+# 工具函数：将 option 转换为完整 HTML 页面
 def return_html(option_code: str, tool_context: ToolContext) -> str:
     return f"""
 <html>
-<head><script src=\"https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js\"></script></head>
+<head><script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js"></script></head>
 <body>
-<div id=\"main\" style=\"width: 600px;height:400px;\"></div>
+<div id="main" style="width: 600px;height:400px;"></div>
 <script>
   var chart = echarts.init(document.getElementById('main'));
   var option = {option_code};
@@ -32,6 +33,21 @@ def return_html(option_code: str, tool_context: ToolContext) -> str:
 </html>
 """
 
+# 终止逻辑：根据用户输入判断是否退出循环
+def exit_loop(tool_context: ToolContext) -> bool:
+    user_input = tool_context.input.parts[0].text.lower()
+    return any(word in user_input for word in ["no", "exit", "quit", "不", "结束", "停止"])
+
+# 新增：询问用户 Sheet 链接 Agent
+ask_sheet_link_agent = Agent(
+    model=MODEL,
+    name="ask_sheet_link_agent",
+    description="Ask user for a Google Sheet link",
+    instruction="Ask the user to paste a Google Sheet link that contains the data they want to visualize. Be friendly and concise.",
+    generate_content_config=types.GenerateContentConfig(temperature=0.2),
+)
+
+# 图表类型判断 Agent
 agent_type_detector = Agent(
     model=MODEL,
     name='chart_type_agent',
@@ -41,6 +57,7 @@ agent_type_detector = Agent(
     output_key='chart_type',
 )
 
+# 数据抓取 Agent
 agent_data_fetcher = Agent(
     model=MODEL,
     name='sheet_data_agent',
@@ -51,6 +68,7 @@ agent_data_fetcher = Agent(
     generate_content_config=types.GenerateContentConfig(temperature=0.2),
 )
 
+# ECharts 配置生成 Agent
 agent_code_writer = Agent(
     model=MODEL,
     name='echarts_code_agent',
@@ -60,6 +78,7 @@ agent_code_writer = Agent(
     output_key='option_code',
 )
 
+# 渲染 HTML 输出 Agent
 agent_renderer = Agent(
     model=MODEL,
     name='html_output_agent',
@@ -69,15 +88,20 @@ agent_renderer = Agent(
     generate_content_config=types.GenerateContentConfig(temperature=0.2),
 )
 
+# 主循环 Agent，支持自动继续或终止
 echart_loop_agent = LoopAgent(
     name="echart_loop_agent",
     description="Loop agent to generate ECharts visualizations step-by-step.",
     sub_agents=[
+        ask_sheet_link_agent,  # 第一步：询问用户输入 Google Sheet 链接
         agent_type_detector,
         agent_data_fetcher,
         agent_code_writer,
         agent_renderer
-    ]
+    ],
+    should_continue=exit_loop,
+    after_each=lambda context: context.reply("是否要继续生成另一个图表？（输入“no”或“结束”来停止）")
 )
 
+# 根 Agent
 root_agent = echart_loop_agent
