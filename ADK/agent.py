@@ -103,8 +103,6 @@ echart_loop_agent = LoopAgent(
         agent_code_writer,
         agent_renderer
     ],
-    exit_condition=should_exit,
-    on_iteration_end=prompt_to_continue
 )
 
 # 根 Agent
