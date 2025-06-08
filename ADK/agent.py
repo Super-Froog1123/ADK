@@ -34,9 +34,13 @@ def return_html(option_code: str, tool_context: ToolContext) -> str:
 """
 
 # 终止逻辑：根据用户输入判断是否退出循环
-def exit_loop(tool_context: ToolContext) -> bool:
+def should_exit(tool_context: ToolContext) -> bool:
     user_input = tool_context.input.parts[0].text.lower()
     return any(word in user_input for word in ["no", "exit", "quit", "不", "结束", "停止"])
+
+# 每次迭代后提示用户是否继续
+def prompt_to_continue(tool_context: ToolContext):
+    tool_context.reply("是否要继续生成另一个图表？（输入“no”或“结束”来停止）")
 
 # 新增：询问用户 Sheet 链接 Agent
 ask_sheet_link_agent = Agent(
@@ -88,7 +92,7 @@ agent_renderer = Agent(
     generate_content_config=types.GenerateContentConfig(temperature=0.2),
 )
 
-# 主循环 Agent，支持自动继续或终止
+# 主循环 Agent，控制整个可视化生成流程
 echart_loop_agent = LoopAgent(
     name="echart_loop_agent",
     description="Loop agent to generate ECharts visualizations step-by-step.",
@@ -99,8 +103,8 @@ echart_loop_agent = LoopAgent(
         agent_code_writer,
         agent_renderer
     ],
-    should_continue=exit_loop,
-    after_each=lambda context: context.reply("是否要继续生成另一个图表？（输入“no”或“结束”来停止）")
+    exit_condition=should_exit,
+    on_iteration_end=prompt_to_continue
 )
 
 # 根 Agent
